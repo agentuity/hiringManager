@@ -24,9 +24,10 @@ if (!process.env.ADMIN_KEY) {
 }
 
 if (!process.env.EXAMPLE_APPLICANT_KEY) {
-	console.warn(
+	console.error(
 		"\x1b[31m[ERROR] EXAMPLE_APPLICANT_KEY environment variable is not set. Required for example applicant agent features.\x1b[0m"
 	);
+	process.exit(1);
 }
 if (!process.env.AGENTUITY_URL) {
 	console.warn(
