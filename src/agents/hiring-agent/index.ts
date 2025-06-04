@@ -239,10 +239,13 @@ export default async function Agent(
 					typeof adminKey !== "string" ||
 					!action ||
 					(action !== "register" && action !== "unregister")
-				)
-					if (adminKey !== process.env.ADMIN_KEY) {
-						return resp.text("Invalid admin key.");
-					}
+				) {
+					return resp.text("Invalid request data.");
+				}
+
+				if (adminKey !== process.env.ADMIN_KEY) {
+					return resp.text("Invalid admin key.");
+				}
 				if (action === "register") {
 					await ctx.kv.set(
 						"applicants",
