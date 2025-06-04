@@ -25,7 +25,7 @@ if (!process.env.ADMIN_KEY) {
 
 if (!process.env.EXAMPLE_APPLICANT_KEY) {
 	console.warn(
-		"\x1b[31m[WARN] EXAMPLE_APPLICANT_KEY environment variable is not set. Example applicant agent features may not work correctly.\x1b[0m"
+		"\x1b[31m[ERROR] EXAMPLE_APPLICANT_KEY environment variable is not set. Required for example applicant agent features.\x1b[0m"
 	);
 }
 if (!process.env.AGENTUITY_URL) {

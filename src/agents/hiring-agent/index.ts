@@ -209,6 +209,22 @@ type admin_data = {
 	action: "register" | "unregister";
 };
 
+export const welcome = () => {
+	return {
+		welcome: "Welcome to the hiring agent, if you are an admin, enter the info in the provided schema to edit registered applicants. Otherwise, you cannot access this agent directly.",
+		prompts: [
+			{
+				data: JSON.stringify({
+					applicantName: "Foo Bar",
+					applicantKey: process.env.EXAMPLE_APPLICANT_KEY,
+					adminKey: process.env.ADMIN_KEY,
+					action: "register",
+				}),
+				contentType: "application/json",
+			},
+		],
+	};
+};
 /**
  * Main Agent Handler Function
  *
