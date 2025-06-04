@@ -40,7 +40,8 @@ export default async function Agent(
 		await hiring_manager.run({
 			data: {
 				applicantName: "Foo Bar",
-				applicantKey: "d47f0f98-5802-4c5e-9180-89d8b44c43a9",
+				applicantKey:
+					process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
 				applicantMessage: "I am ready to start the interview.",
 				fromId: ctx.agent.id, // This agent's ID
 			},
@@ -88,7 +89,9 @@ Question: ${hiringMessage}
 			await hiring_manager.run({
 				data: {
 					applicantName: "Foo Bar",
-					applicantKey: "d47f0f98-5802-4c5e-9180-89d8b44c43a9",
+					applicantKey:
+						process.env.EXAMPLE_APPLICANT_KEY ??
+						"missing-key",
 					applicantMessage: response.text,
 					fromId: ctx.agent.id,
 				},

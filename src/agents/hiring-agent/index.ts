@@ -165,25 +165,17 @@ Include the full interview exactly as provided.
  * For demo purposes, this checks against a local JSON file. In production, you would
  * typically use API keys or other secure authentication methods.
  */
-async function verify_applicant(name: string, key: string): Promise<boolean> {
-	try {
-		const data = await Bun.file(
-			"src/agents/hiring-agent/registered_applicants.json"
-		).text();
-		const applicants = JSON.parse(data) as {
-			name: string;
-			key: string;
-		}[];
-		return applicants.some(
-			(applicant) => applicant.name === name && applicant.key === key
-		);
-	} catch (error) {
-		console.error(
-			"Error reading or parsing registered_applicants.json:",
-			error
-		);
-		return false;
+async function verify_applicant(
+	name: string,
+	key: string,
+	ctx: AgentContext
+): Promise<boolean> {
+	const kvResult = await ctx.kv.get("applicants", key);
+	if (kvResult.exists) {
+		let applicantName = await kvResult.data.text();
+		return applicantName === name;
 	}
+	return false;
 }
 
 /**
@@ -208,6 +200,16 @@ type logEntry = {
 };
 
 /**
+ * Expected type of admin to register an applicant.
+ */
+type admin_data = {
+	applicantName: string;
+	applicantKey: string;
+	adminKey: string;
+	action: "register" | "unregister";
+};
+
+/**
  * Main Agent Handler Function
  *
  * This function processes incoming requests from applicant agents and manages the interview flow.
@@ -222,9 +224,29 @@ export default async function Agent(
 	resp: AgentResponse,
 	ctx: AgentContext
 ) {
-	// Only accept requests from other agents - this ensures proper agent-to-agent communication
+	// Only accept requests from other agents or the admin.
 	if (req.trigger !== "agent") {
-		ctx.logger.info("Hiring Manager: Received manual trigger, exiting.");
+		if (req.trigger === "manual") {
+			try {
+				let { applicantName, applicantKey, adminKey, action } =
+					(await req.data.json()) as admin_data;
+				if (adminKey !== process.env.ADMIN_KEY) {
+					return resp.text("Invalid admin key.");
+				}
+				if (action === "register") {
+					await ctx.kv.set(
+						"applicants",
+						applicantKey,
+						applicantName
+					);
+				} else if (action === "unregister") {
+					await ctx.kv.delete("applicants", applicantKey);
+				}
+				return resp.text("Success.");
+			} catch (error) {
+				return resp.text("Sorry, I only talk to agents.");
+			}
+		}
 		return resp.text("Sorry, I only talk to agents.");
 	}
 
@@ -248,7 +270,7 @@ export default async function Agent(
 	}
 
 	// Security check: Verify the applicant is registered and authorized
-	let valid = await verify_applicant(applicantName, applicantKey);
+	let valid = await verify_applicant(applicantName, applicantKey, ctx);
 	if (!valid) {
 		return resp.text("Sorry, I only talk to registered applicants.");
 	}
