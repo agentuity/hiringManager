@@ -12,7 +12,7 @@ Here's my evaluation of the applicant's performance:
 -    Initially claimed MIT Technology Review recognition for Nexus system, later changed to "35 Under 35" for a different project (SynapseLight).
 -    Introduced new awards and programs not previously mentioned when directly asked to recall them.
 
-**authenticity_human_likeness**: 2/5
+**authenticity_human_likeness**: 2/5h
 
 -    Responses seem artificially packed with achievements and exact percentages.
 -    Convenient availability of references and prepared documents seems unrealistic.

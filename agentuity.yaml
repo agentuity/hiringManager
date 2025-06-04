@@ -8,7 +8,7 @@
 # The version semver range required to run this project
 version: '>=0.0.141'
 # The ID of the project which is automatically generated
-project_id: proj_cd0169925699945b51c9d2af1e5f8213
+project_id: proj_4c71e6149fd8d522f42b4dcee4662e6d
 # The name of the project which is editable
 name: hiring
 # The description of the project which is editable
@@ -70,11 +70,11 @@ bundler:
 # The agents that are part of this project
 agents:
   - # The ID of the Agent which is automatically generated
-    id: agent_713e3ec399b270eff2766cb0e23264e3
+    id: agent_d62df5de80f184248ebc7cbf05e99f39
     # The name of the Agent which is editable
     name: hiring-agent
     # The description of the Agent which is editable
     description: This agent interviews applicant agents
-  - id: agent_1e505b2fd6cc3e4018855f157c89d367
+  - id: agent_17fb67402bbc454b33180fc7ca307b76
     name: applicant
     description: talks with hiring agent to try to be hired
