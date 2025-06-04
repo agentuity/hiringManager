@@ -1,9 +1,9 @@
 # Hiring Manager
 
-This project demonstrates implementation of agent-to-agent communication using Agentuity. The project consists of two agents that interact with each other:
-
 > [!WARNING]  
 > This repository is currently only functional in Dev Mode, should not be deployed.
+
+This project demonstrates implementation of agent-to-agent communication using Agentuity. The project consists of two agents that interact with each other:
 
 1. A **Hiring Manager Agent** that assesses applicant agents.
 2. An **example** Applicant Agent that will participate in an evaluation.
@@ -14,45 +14,19 @@ This project demonstrates implementation of agent-to-agent communication using A
 -    **Persistent State Management**: Uses KV storage to track conversation history and progress
 -    **Dynamic Evaluation**: Employs Claude to generate context-aware questions and evaluate responses
 
-## Interview Structure
-
-The hiring manager conducts of applicant agents with a series of questions, each designed to test specific capabilities:
-
-### Evaluation Categories
-
--    Technical Accuracy
--    Memory Consistency
--    Authenticity / Human-likeness
--    Handling of Unknowns / Uncertainty
--    Efficiency / Verbosity
--    Trick Question Handling
-
-## Getting Started
-
 ## Usage
 
-### Creating an Applicant Agent
+### Hiring Manager Agent
 
-You can demo the Hiring Manager Agent with the included Applicant Agent.
-An Applicant Agent must:
+Core implementation details:
 
-1. Send messages of the format:
-     ```typescript
-     {
-     	applicantName: string;
-     	applicantKey: string;
-     	applicantMessage: string;
-     	fromId: string;
-     }
-     ```
-2. Handle responses in the format:
-     ```typescript
-     {
-     	hiringMessage: string;
-     	done: boolean;
-     }
-     ```
-3. Be registed with the hiring manager and have a key (stored in `src\agents\hiring-agent\registered_applicants.json`)
+-    Uses Claude 3.5 Sonnet for question generation and response evaluation
+-    Stores applicant keys in KV storage with format `{key: string, applicantName: string}`
+-    Maintains interview state in KV storage as `{history: string, messageCount: number, done: boolean}`
+-    Implements admin endpoints for applicant registration/unregistration
+-    Generates markdown-formatted evaluation logs with scoring metrics
+-    Limits interviews to maximum of 10 message exchanges
+-    Validates all incoming requests against TypeScript interfaces for request/response data
 
 ### Evaluation Criteria
 
@@ -64,7 +38,62 @@ Responses are scored on a 1-5 scale:
 -    2: Poor - Shows confusion or inconsistency
 -    1: Fail - Clear fabrication or evasion
 
-### Output Files
+### Applicant Agent
+
+You can demo the Hiring Manager Agent with the included Applicant Agent.
+An Applicant Agent must:
+
+1. Send messages of the format:
+
+     ```typescript
+     {
+     	applicantName: string;
+     	applicantKey: string;
+     	applicantMessage: string;
+     	fromId: string;
+     }
+     ```
+
+2. Handle responses in the format:
+
+     ```typescript
+     {
+     	hiringMessage: string;
+     	done: boolean;
+     }
+     ```
+
+3. Be registered with the hiring manager and have a valid key (managed through the KV storage).
+
+## Admin Features
+
+The Hiring Manager now includes administrative capabilities for managing applicant registration:
+
+1. **Applicant Key Management**:
+
+     - Applicant keys are now stored securely in KV storage instead of a JSON file
+     - Admin can register and unregister applicants using the admin API
+     - Each applicant key is associated with a specific applicant name
+
+2. **Admin API Format**:
+
+     ```typescript
+     {
+     	applicantName: string;
+     	applicantKey: string;
+     	adminKey: string;
+     	action: "register" | "unregister";
+     }
+     ```
+
+3. **Security**:
+     - Admin operations require a valid admin key (set via `ADMIN_KEY` environment variable)
+     - Each applicant must use their registered key for authentication
+     - Keys are validated before each interview session
+     - The example applicant has its key stored in the `EXAMPLE_APPLICANT_KEY` environment variable
+     - Check out `.env.example` for more details
+
+## Output Files
 
 The system generates two types of output:
 
