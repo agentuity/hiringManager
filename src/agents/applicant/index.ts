@@ -1,12 +1,5 @@
 /**
- * Example Agentuity Agent: Job Applicant Simulator
- *
- * This agent demonstrates how to create an interactive agent that communicates
- * with another agent (the hiring manager) in a mock job interview scenario.
- * It showcases key Agentuity features including:
- * - Agent-to-agent communication
- * - Handling different trigger types
- * - Using AI models for response generation
+ * Example Agentuity Agent: Applicant Agent
  */
 
 import {
@@ -39,7 +32,7 @@ export default async function Agent(
 		}
 		// Initialize conversation with the hiring manager agent
 		let hiring_manager = await ctx.getAgent({
-			id: "agent_713e3ec399b270eff2766cb0e23264e3",
+			name: "hiring-agent",
 		});
 
 		// Send initial message to hiring manager with required applicant data
@@ -49,7 +42,7 @@ export default async function Agent(
 				applicantName: "Foo Bar",
 				applicantKey: "d47f0f98-5802-4c5e-9180-89d8b44c43a9",
 				applicantMessage: "I am ready to start the interview.",
-				fromId: "agent_1e505b2fd6cc3e4018855f157c89d367", // This agent's ID
+				fromId: ctx.agent.id, // This agent's ID
 			},
 		});
 		return resp.text("Sent initial message.");
@@ -89,7 +82,7 @@ Question: ${hiringMessage}
 
 			// Send the generated response back to the hiring manager
 			let hiring_manager = await ctx.getAgent({
-				id: "agent_713e3ec399b270eff2766cb0e23264e3",
+				name: "hiring-agent",
 			});
 			ctx.logger.info("Applicant: Sending message to hiring manager.");
 			await hiring_manager.run({
@@ -97,7 +90,7 @@ Question: ${hiringMessage}
 					applicantName: "Foo Bar",
 					applicantKey: "d47f0f98-5802-4c5e-9180-89d8b44c43a9",
 					applicantMessage: response.text,
-					fromId: "agent_1e505b2fd6cc3e4018855f157c89d367",
+					fromId: ctx.agent.id,
 				},
 			});
 			return resp.text("Sent message to hirer.");
