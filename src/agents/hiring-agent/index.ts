@@ -230,9 +230,19 @@ export default async function Agent(
 			try {
 				let { applicantName, applicantKey, adminKey, action } =
 					(await req.data.json()) as admin_data;
-				if (adminKey !== process.env.ADMIN_KEY) {
-					return resp.text("Invalid admin key.");
-				}
+				if (
+					!applicantName ||
+					typeof applicantName !== "string" ||
+					!applicantKey ||
+					typeof applicantKey !== "string" ||
+					!adminKey ||
+					typeof adminKey !== "string" ||
+					!action ||
+					(action !== "register" && action !== "unregister")
+				)
+					if (adminKey !== process.env.ADMIN_KEY) {
+						return resp.text("Invalid admin key.");
+					}
 				if (action === "register") {
 					await ctx.kv.set(
 						"applicants",
@@ -241,6 +251,8 @@ export default async function Agent(
 					);
 				} else if (action === "unregister") {
 					await ctx.kv.delete("applicants", applicantKey);
+				} else {
+					return resp.text("Invalid action.");
 				}
 				return resp.text("Success.");
 			} catch (error) {
