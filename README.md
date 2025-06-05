@@ -109,7 +109,7 @@ You can send a POST request to the Hiring Manager agent to register or unregiste
     "applicantName": "<string>",
     "applicantKey": "<string>",
     "adminKey": "<string>",
-    "action": "register" | "unregister"
+    "action": "register" // or "unregister"
 }
 ```
 ## Output Files
