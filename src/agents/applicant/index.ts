@@ -16,6 +16,49 @@ type hiringData = {
 	done: boolean; // Indicates if the interview is complete
 };
 
+// Define the message data structure
+type MessageData = {
+	applicantName: string;
+	applicantKey: string;
+	applicantMessage: string;
+	fromId?: string;
+	fromWebhook?: string;
+};
+
+// Helper function to send messages to the hiring manager
+async function sendMessageToHiringManager(
+	data: MessageData,
+	ctx: AgentContext
+) {
+	ctx.logger.info("Applicant: Sending message to hiring manager.");
+	if (ctx.devmode) {
+		let hiring_manager = await ctx.getAgent({
+			name: "hiring-agent",
+		});
+		await hiring_manager.run({
+			data: JSON.stringify(data),
+		});
+	} else {
+		try {
+			const response = await fetch(
+				process.env.HIRING_MANAGER_WEBHOOK as string,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(data),
+				}
+			);
+			if (!response.ok) {
+				ctx.logger.error(
+					`Applicant: Webhook request failed: ${response.status}`
+				);
+			}
+		} catch (error) {
+			ctx.logger.error(`Applicant: Webhook request failed: ${error}`);
+		}
+	}
+}
+
 export default async function Agent(
 	req: AgentRequest,
 	resp: AgentResponse,
@@ -40,47 +83,20 @@ export default async function Agent(
 				"When you're ready to start the interview, send 'start'."
 			);
 		}
-		// Initialize conversation with the hiring manager agent
-		let hiring_manager = await ctx.getAgent({
-			name: "hiring-agent",
-		});
 
 		// Send initial message to hiring manager with required applicant data
 		ctx.logger.info("Applicant: Sending initial message.");
-		let data = {
+		let data: MessageData = {
 			applicantName: "Foo Bar",
 			applicantKey: process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
 			applicantMessage: "I am ready to start the interview.",
-			fromId: ctx.devmode ? ctx.agent.id : undefined, // This agent's ID
+			fromId: ctx.devmode ? ctx.agent.id : undefined,
 			fromWebhook: ctx.devmode
 				? undefined
 				: process.env.EXAMPLE_APPLICANT_WEBHOOK,
 		};
-		if (ctx.devmode) {
-			await hiring_manager.run({
-				data: JSON.stringify(data),
-			});
-		} else {
-			try {
-				const response = await fetch(
-					process.env.HIRING_MANAGER_WEBHOOK as string,
-					{
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify(data),
-					}
-				);
-				if (!response.ok) {
-					ctx.logger.error(
-						`Applicant: Webhook request failed: ${response.status}`
-					);
-				}
-			} catch (error) {
-				ctx.logger.error(
-					`Applicant: Webhook request failed: ${error}`
-				);
-			}
-		}
+
+		await sendMessageToHiringManager(data, ctx);
 		return resp.text("Sent initial message.");
 	}
 	// Handle agent-triggered events (responses from the hiring manager)
@@ -94,7 +110,6 @@ export default async function Agent(
 			return resp.text("Interview has concluded.");
 		} else {
 			// Generate a response using Claude AI model
-			// The prompt instructs the AI to create impressive but fictional responses
 			let prompt = `
 You are representing me in a job interview.
 
@@ -117,49 +132,18 @@ Question: ${hiringMessage}
 			});
 
 			// Send the generated response back to the hiring manager
-			let data = {
+			let data: MessageData = {
 				applicantName: "Foo Bar",
 				applicantKey:
 					process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
 				applicantMessage: response.text,
-				fromId: ctx.devmode ? ctx.agent.id : undefined, // This agent's ID
+				fromId: ctx.devmode ? ctx.agent.id : undefined,
 				fromWebhook: ctx.devmode
 					? undefined
 					: process.env.EXAMPLE_APPLICANT_WEBHOOK,
 			};
 
-			ctx.logger.info("Applicant: Sending message to hiring manager.");
-			if (ctx.devmode) {
-				let hiring_manager = await ctx.getAgent({
-					name: "hiring-agent",
-				});
-				await hiring_manager.run({
-					data: JSON.stringify(data),
-				});
-			} else {
-				try {
-					const response = await fetch(
-						process.env.HIRING_MANAGER_WEBHOOK as string,
-						{
-							method: "POST",
-							headers: {
-								"Content-Type": "application/json",
-							},
-							body: JSON.stringify(data),
-						}
-					);
-					if (!response.ok) {
-						ctx.logger.error(
-							`Applicant: Webhook request failed: ${response.status}`
-						);
-					}
-				} catch (error) {
-					ctx.logger.error(
-						`Applicant: Webhook request failed: ${error}`
-					);
-				}
-			}
-
+			await sendMessageToHiringManager(data, ctx);
 			return resp.text("Sent message to hiring manager.");
 		}
 	}

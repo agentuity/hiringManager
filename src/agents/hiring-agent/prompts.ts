@@ -75,6 +75,7 @@ Evaluation areas:
 	6. trick_question_handling
 - \`done\`: Boolean. Set to \`true\` when the interview is over. (You cannot send more messages after this.)
     - If you decide that an interview is done, **make sure to NOT end on a question**. Instead tell the applicant goodbye.
+    - If %MESSAGE_COUNT% == ${MAX_MESSAGES}, you **must** set \`done\` to \`true\`, **and do not end on a question, this is critical.** 
 
 Interview history:
 %HISTORY%

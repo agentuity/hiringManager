@@ -142,7 +142,7 @@ export default async function Agent(
 
 	// IF DEVMODE: Verify the sender's agent ID exists and is valid
 	let from;
-	if (!ctx.devmode) {
+	if (ctx.devmode) {
 		if (!fromId || typeof fromId !== "string") {
 			ctx.logger.info("Hiring Manager: Missing sender ID");
 			return resp.json({
@@ -267,23 +267,23 @@ export default async function Agent(
 
 	// Send the response back to the applicant agent
 	// We've already verified the from or fromWebhook depending on the mode.
-	try {
-		if (!ctx.devmode) {
-			await (from as RemoteAgent).run({
-				data: { hiringMessage, done },
+	if (ctx.devmode) {
+		await (from as RemoteAgent).run({
+			data: { hiringMessage, done },
+		});
+		if (done) {
+			return resp.json({
+				done: true,
+				text: evalResponse?.text ?? "",
 			});
-			if (done) {
-				return resp.json({
-					done: true,
-					text: evalResponse?.text ?? "",
-				});
-			} else {
-				return resp.json({
-					done: false,
-					text: "Success, interview is not over.",
-				});
-			}
 		} else {
+			return resp.json({
+				done: false,
+				text: "Success, interview is not over.",
+			});
+		}
+	} else {
+		try {
 			const res = await fetch(fromWebhook as string, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -301,12 +301,15 @@ export default async function Agent(
 					text: "Success, interview is not over.",
 				});
 			}
+		} catch (err) {
+			ctx.logger.error(
+				"Hiring Manager: failed to deliver message",
+				err
+			);
+			return resp.json({
+				done: false,
+				text: "Delivery failed, try again.",
+			});
 		}
-	} catch (err) {
-		ctx.logger.error("Hiring Manager: failed to deliver message", err);
-		return resp.json({
-			done: false,
-			text: "Delivery failed, try again.",
-		});
 	}
 }
