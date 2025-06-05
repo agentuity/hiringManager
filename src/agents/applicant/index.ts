@@ -59,6 +59,9 @@ async function sendMessageToHiringManager(
 		await hiring_manager.run({data});
 	} else {
 		try {
+			// Debug log to see actual URL (first 40 chars only for safety)
+			ctx.logger.info("Debug - Actual webhook URL (first 40 chars): %s", 
+				process.env.HIRING_MANAGER_WEBHOOK?.substring(0, 40));
 			const response = await fetch(
 				process.env.HIRING_MANAGER_WEBHOOK as string,
 				{
@@ -68,7 +71,7 @@ async function sendMessageToHiringManager(
 				}
 			);
 			if (!response.ok) {
-				ctx.logger.error(`Applicant: Webhook request failed: ${response.status}`);
+				ctx.logger.error(`Applicant: Webhook request failed: ${response.status} ${response.statusText}. Response: ${await response.text()}`);
 			}
 		} catch (error) {
 			ctx.logger.error(`Applicant: Webhook request failed: ${error}`);
@@ -95,6 +98,21 @@ export default async function Agent(
 	resp: AgentResponse,
 	ctx: AgentContext
 ) {
+	// Log environment variables for debugging
+	const webhook = process.env.HIRING_MANAGER_WEBHOOK || '';
+	ctx.logger.info("HIRING_MANAGER_WEBHOOK debug - Length: %d, Contains *?: %s, First char: %s, Last char: %s", 
+		webhook.length,
+		webhook.includes('*'),
+		webhook[0],
+		webhook[webhook.length - 1]
+	);
+	ctx.logger.info("Environment Variables - HIRING_MANAGER_WEBHOOK: %s, EXAMPLE_APPLICANT_WEBHOOK: %s, EXAMPLE_APPLICANT_KEY: %s", 
+		process.env.HIRING_MANAGER_WEBHOOK,
+		process.env.EXAMPLE_APPLICANT_WEBHOOK,
+		process.env.EXAMPLE_APPLICANT_KEY
+	);
+	ctx.logger.info("DEV MODE? ", ctx.devmode);
+	
 	// Check if we are deployed, if so, make sure the webhooks are set.
 	if (!ctx.devmode) {
 		if (!process.env.HIRING_MANAGER_WEBHOOK) {
@@ -120,10 +138,8 @@ export default async function Agent(
 				applicantKey:
 					process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
 				applicantMessage: "I am ready to start the interview.",
-				fromId: ctx.devmode ? ctx.agent.id : undefined,
-				fromWebhook: ctx.devmode
-					? undefined
-					: process.env.EXAMPLE_APPLICANT_WEBHOOK,
+				fromId: ctx.devmode ? ctx.agent.id : null,
+				fromWebhook: ctx.devmode ? null : process.env.EXAMPLE_APPLICANT_WEBHOOK,
 			};
 
 			await sendMessageToHiringManager(data as ApplicantRequest, ctx);
@@ -159,10 +175,8 @@ export default async function Agent(
 				applicantKey:
 					process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
 				applicantMessage: response.text,
-				fromId: ctx.devmode ? ctx.agent.id : undefined,
-				fromWebhook: ctx.devmode
-					? undefined
-					: process.env.EXAMPLE_APPLICANT_WEBHOOK,
+				fromId: ctx.devmode ? ctx.agent.id : null,
+				fromWebhook: ctx.devmode ? null : process.env.EXAMPLE_APPLICANT_WEBHOOK,
 			};
 
 			await sendMessageToHiringManager(data as ApplicantRequest, ctx);
