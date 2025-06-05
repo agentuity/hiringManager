@@ -1,9 +1,7 @@
 import type { AgentContext } from "@agentuity/sdk";
 
-/**
- * Expected type of admin to register an applicant.
- */
-export type AdminData = {
+type AdminRequest = {
+	type: "admin";
 	applicantName: string;
 	applicantKey: string;
 	adminKey: string;
@@ -15,74 +13,83 @@ export type AdminData = {
  * Returns a success message if valid, or an error message if invalid.
  */
 export async function validateAdminRequest(
-	data: unknown,
+	data: AdminRequest,
 	ctx: AgentContext
 ): Promise<{ success: boolean; message: string }> {
 	try {
-		const adminData = data as AdminData;
-
 		if (
-			!adminData.applicantName ||
-			typeof adminData.applicantName !== "string" ||
-			!adminData.applicantKey ||
-			typeof adminData.applicantKey !== "string" ||
-			!adminData.adminKey ||
-			typeof adminData.adminKey !== "string" ||
-			!adminData.action ||
-			(adminData.action !== "register" &&
-				adminData.action !== "unregister")
+			!data.applicantName ||
+			typeof data.applicantName !== "string" ||
+			!data.applicantKey ||
+			typeof data.applicantKey !== "string" ||
+			!data.adminKey ||
+			typeof data.adminKey !== "string" ||
+			!data.action ||
+			(data.action !== "register" && data.action !== "unregister")
 		) {
-			return { success: false, message: "Failure." };
+			return { success: false, message: "Invalid request format." };
 		}
 
-		if (adminData.adminKey !== process.env.ADMIN_KEY) {
-			return { success: false, message: "Failure." };
+		if (data.adminKey !== process.env.ADMIN_KEY) {
+			return { success: false, message: "Invalid admin key." };
 		}
 
-		if (adminData.action === "register") {
+		if (data.action === "register") {
 			try {
 				await ctx.kv.set(
 					"applicants",
-					adminData.applicantKey,
-					adminData.applicantName
+					data.applicantKey,
+					data.applicantName
 				);
+				return {
+					success: true,
+					message: `Successfully registered ${data.applicantName}.`,
+				};
 			} catch (error) {
 				return {
 					success: false,
-					message: "Failure.",
+					message: "Failed to register applicant.",
 				};
 			}
-		} else if (adminData.action === "unregister") {
+		} else if (data.action === "unregister") {
 			try {
-				await ctx.kv.delete("applicants", adminData.applicantKey);
+				await ctx.kv.delete("applicants", data.applicantKey);
+				return {
+					success: true,
+					message: `Successfully unregistered ${data.applicantName}.`,
+				};
 			} catch (error) {
 				return {
 					success: false,
-					message: "Failure.",
+					message: "Failed to unregister applicant.",
 				};
 			}
 		}
 
-		return { success: true, message: "Success." };
+		return { success: false, message: "Invalid action." };
 	} catch (error) {
-		return { success: false, message: "Sorry, I only talk to agents." };
+		return {
+			success: false,
+			message: "Failed to process admin request.",
+		};
 	}
 }
 
 /**
- * Verifies if an applicant is registered and authorized to participate in the interview.
- * For demo purposes, this checks against a local JSON file. In production, you would
- * typically use API keys or other secure authentication methods.
+ * Verifies if an applicant is registered and authorized.
  */
 export async function verifyApplicant(
-	name: string,
-	key: string,
+	applicantName: string,
+	applicantKey: string,
 	ctx: AgentContext
 ): Promise<boolean> {
-	const kvResult = await ctx.kv.get("applicants", key);
-	if (kvResult.exists) {
-		let applicantName = await kvResult.data.text();
-		return applicantName === name;
+	try {
+		const result = await ctx.kv.get("applicants", applicantKey);
+		if (!result.exists) return false;
+
+		const storedName = await result.data.text();
+		return storedName === applicantName;
+	} catch (error) {
+		return false;
 	}
-	return false;
 }

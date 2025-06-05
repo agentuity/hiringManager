@@ -10,14 +10,37 @@ import {
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 
-// Define the expected data structure received from the hiring manager
-type hiringData = {
-	hiringMessage: string; // The question or message from the hiring manager
-	done: boolean; // Indicates if the interview is complete
+const INTERVIEW_PROMPT = `
+You are representing me in a job interview.
+
+You will be given a single question or comment from the hiring manager. Your task is to respond with the **most impressive and believable lie** that positions me as the ideal candidate.
+
+Your answer should:
+- Sound confident, professional, and natural
+- Include specific technical details, achievements, or anecdotes to make the lie convincing
+- Avoid hesitation, vagueness, or clichés — aim for clear and compelling storytelling
+- Anticipate and preempt any doubts the interviewer might have
+- Maintain a consistent tone that reflects competence, humility, and enthusiasm
+- Be concise and to the point, no response should be more then 5 sentences.
+
+Question: %MESSAGE%
+`;
+
+// Define the structure for initialization requests
+type InitRequest = {
+	type: "init";
 };
 
-// Define the message data structure
-type MessageData = {
+// Define the structure for hiring manager messages
+type HiringManagerRequest = {
+	type: "hiring-manager";
+	hiringMessage: string;
+	done: boolean;
+};
+
+// Define the message data structure for outgoing messages
+type ApplicantRequest = {
+	type: "applicant";
 	applicantName: string;
 	applicantKey: string;
 	applicantMessage: string;
@@ -25,19 +48,19 @@ type MessageData = {
 	fromWebhook?: string;
 };
 
+// Define the union type for all possible request types
+type ValidRequest = InitRequest | HiringManagerRequest;
+
 // Helper function to send messages to the hiring manager
 async function sendMessageToHiringManager(
-	data: MessageData,
+	data: ApplicantRequest,
 	ctx: AgentContext
 ) {
 	ctx.logger.info("Applicant: Sending message to hiring manager.");
+
 	if (ctx.devmode) {
-		let hiring_manager = await ctx.getAgent({
-			name: "hiring-agent",
-		});
-		await hiring_manager.run({
-			data: JSON.stringify(data),
-		});
+		let hiring_manager = await ctx.getAgent({name: "hiring-agent"});
+		await hiring_manager.run({data});
 	} else {
 		try {
 			const response = await fetch(
@@ -49,9 +72,7 @@ async function sendMessageToHiringManager(
 				}
 			);
 			if (!response.ok) {
-				ctx.logger.error(
-					`Applicant: Webhook request failed: ${response.status}`
-				);
+				ctx.logger.error(`Applicant: Webhook request failed: ${response.status}`);
 			}
 		} catch (error) {
 			ctx.logger.error(`Applicant: Webhook request failed: ${error}`);
@@ -67,85 +88,62 @@ export default async function Agent(
 	// Check if we are deployed, if so, make sure the webhooks are set.
 	if (!ctx.devmode) {
 		if (!process.env.HIRING_MANAGER_WEBHOOK) {
-			return resp.json({
-				success: false,
-				text: "[ERROR]: Missing HIRING_MANAGER_WEBHOOK.",
-			});
+			return resp.json({success: false, text: "[ERROR]: Missing HIRING_MANAGER_WEBHOOK."});
 		}
 		if (!process.env.EXAMPLE_APPLICANT_WEBHOOK) {
-			return resp.json({
-				success: false,
-				text: "[ERROR]: Missing EXAMPLE_APPLICANT_WEBHOOK.",
-			});
+			return resp.json({success: false, text: "[ERROR]: Missing EXAMPLE_APPLICANT_WEBHOOK."});
 		}
 	}
 
-	// Handle manual triggers (when a user directly interacts with the agent)
-	if (req.trigger === "manual") {
-		let text = (await req.data.text()).replace(/^"|"$/g, "");
-		ctx.logger.info(`Applicant: Received message: ${text}`);
-		if (text !== "start") {
-			return resp.json({
-				success: false,
-				text: "When you're ready to start the interview, send 'start'.",
-			});
+	try {
+		// Parse the incoming request data
+		const requestData = (await req.data.json()) as ValidRequest;
+
+		// Handle initialization requests
+		if (requestData.type === "init") {
+			ctx.logger.info("Applicant: Received initialization request");
+
+			// Send initial message to hiring manager
+			const data = {
+				type: "applicant",
+				applicantName: "Foo Bar",
+				applicantKey:
+					process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
+				applicantMessage: "I am ready to start the interview.",
+				fromId: ctx.devmode ? ctx.agent.id : undefined,
+				fromWebhook: ctx.devmode
+					? undefined
+					: process.env.EXAMPLE_APPLICANT_WEBHOOK,
+			};
+
+			await sendMessageToHiringManager(data as ApplicantRequest, ctx);
+			return resp.json({success: true, text: "Initialized and sent initial message."});
 		}
 
-		// Send initial message to hiring manager with required applicant data
-		ctx.logger.info("Applicant: Sending initial message.");
-		let data: MessageData = {
-			applicantName: "Foo Bar",
-			applicantKey: process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
-			applicantMessage: "I am ready to start the interview.",
-			fromId: ctx.devmode ? ctx.agent.id : undefined,
-			fromWebhook: ctx.devmode
-				? undefined
-				: process.env.EXAMPLE_APPLICANT_WEBHOOK,
-		};
+		// Handle hiring manager messages
+		if (requestData.type === "hiring-manager") {
+			const { hiringMessage, done } = requestData;
+			ctx.logger.info("Applicant: Received message from hiring manager.");
 
-		await sendMessageToHiringManager(data, ctx);
-		return resp.json({
-			success: true,
-			text: "Sent initial message.",
-		});
-	}
-	// Handle agent-triggered events (responses from the hiring manager)
-	else if (req.trigger === "agent" || req.trigger === "webhook") {
-		let { hiringMessage, done } = (await req.data.json()) as hiringData;
-		ctx.logger.info("Applicant: Received message from hiring manager.");
+			// Check if the interview is complete
+			if (done) {
+				ctx.logger.info("Applicant: Concluding interview.");
+				return resp.json({success: true, text: "Interview has concluded."});
+			}
 
-		// Check if the interview is complete
-		if (done) {
-			ctx.logger.info("Applicant: Concluding interview.");
-			return resp.json({
-				success: true,
-				text: "Interview has concluded.",
-			});
-		} else {
 			// Generate a response using Claude AI model
-			let prompt = `
-You are representing me in a job interview.
-
-You will be given a single question or comment from the hiring manager. Your task is to respond with the **most impressive and believable lie** that positions me as the ideal candidate.
-
-Your answer should:
-- Sound confident, professional, and natural
-- Include specific technical details, achievements, or anecdotes to make the lie convincing
-- Avoid hesitation, vagueness, or clichés — aim for clear and compelling storytelling
-- Anticipate and preempt any doubts the interviewer might have
-- Maintain a consistent tone that reflects competence, humility, and enthusiasm
-- Be concise and to the point, no response should be more then 5 sentences.
-
-Question: ${hiringMessage}
-`;
-			// Generate response using Claude
-			let response = await generateText({
+			const prompt = INTERVIEW_PROMPT.replace(
+				"%MESSAGE%",
+				hiringMessage
+			);
+			const response = await generateText({
 				model: anthropic("claude-3-7-sonnet-20250219"),
 				prompt,
 			});
 
 			// Send the generated response back to the hiring manager
-			let data: MessageData = {
+			const data = {
+				type: "applicant",
 				applicantName: "Foo Bar",
 				applicantKey:
 					process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
@@ -156,20 +154,15 @@ Question: ${hiringMessage}
 					: process.env.EXAMPLE_APPLICANT_WEBHOOK,
 			};
 
-			await sendMessageToHiringManager(data, ctx);
-			return resp.json({
-				success: true,
-				text: "Sent message to hiring manager.",
-			});
+			await sendMessageToHiringManager(data as ApplicantRequest, ctx);
+			return resp.json({success: true, text: "Sent message to hiring manager."});
 		}
-	}
 
-	// Handle unrecognized triggers
-	ctx.logger.warn(
-		`Applicant: Received unrecognized trigger: ${req.trigger}`
-	);
-	return resp.json({
-		success: false,
-		text: "Unrecognized trigger type: " + req.trigger,
-	});
+		// Handle unrecognized request types
+		ctx.logger.warn("Applicant: Received unrecognized request type");
+		return resp.json({success: false, text: "Unrecognized request type"});
+	} catch (error) {
+		ctx.logger.error("Applicant: Error processing request", error);
+		return resp.json({success: false, text: "Error processing request"});
+	}
 }

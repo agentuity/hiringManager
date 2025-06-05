@@ -25,27 +25,34 @@ import { z } from "zod";
 import { INTERVIEW_PROMPT, EVALUATION_PROMPT, MAX_MESSAGES } from "./prompts";
 import { verifyApplicant, validateAdminRequest } from "./admin";
 
-/**
- * Expected data structure that applicant agents must send in their requests.
- * This ensures consistent communication format between agents.
- */
-type ApplicantData = {
+// Define the structure for admin requests
+type AdminRequest = {
+	type: "admin";
+	applicantName: string;
+	applicantKey: string;
+	adminKey: string;
+	action: "register" | "unregister";
+};
+
+// Define the structure for applicant messages
+type ApplicantRequest = {
+	type: "applicant";
 	applicantName: string;
 	applicantKey: string;
 	applicantMessage: string;
-	fromId?: string | undefined;
-	fromWebhook?: string | undefined;
+	fromId?: string;
+	fromWebhook?: string;
 };
 
-/**
- * Structure for storing conversation state in the KV store.
- * Tracks conversation history, message count, and completion status.
- */
-type LogEntry = {
-	history: string;
-	messageCount: number;
+// Define the structure for hiring manager responses
+type HiringManagerResponse = {
+	type: "hiring-manager";
+	hiringMessage: string;
 	done: boolean;
 };
+
+// Define the union type for all possible request types
+type ValidRequest = AdminRequest | ApplicantRequest;
 
 export const welcome = () => {
 	return {
@@ -79,241 +86,208 @@ export default async function Agent(
 	resp: AgentResponse,
 	ctx: AgentContext
 ) {
-	// Only accept requests from other agents or the admin.
-	if (req.trigger !== "agent" && req.trigger !== "webhook") {
-		ctx.logger.info(
-			"Hiring Manager: Non-agent request received: ",
-			req.trigger
-		);
-		if (req.trigger === "manual") {
+	try {
+		// Parse the incoming request data
+		const requestData = (await req.data.json()) as ValidRequest;
+
+		// Handle admin requests
+		if (requestData.type === "admin") {
 			try {
-				const result = await validateAdminRequest(
-					await req.data.json(),
-					ctx
-				);
-				ctx.logger.info(
-					"Hiring Manager: Admin request validated successfully"
-				);
+				const result = await validateAdminRequest(requestData, ctx);
+				ctx.logger.info("Hiring Manager: Admin request validated successfully");
 				return resp.json({ done: true, text: result.message });
 			} catch (error) {
 				ctx.logger.info("Hiring Manager: Invalid admin request");
-				return resp.json({
-					done: false,
-					text: "Sorry, I only talk to agents.",
-				});
+				return resp.json({done: false, text: "Invalid admin request"});
 			}
 		}
-		ctx.logger.info("Hiring Manager: Non-agent request rejected");
-		return resp.json({
-			done: false,
-			text: "Sorry, I only talk to agents.",
-		});
-	}
 
-	// Parse and validate the incoming request data from the applicant agent
-	let {
-		applicantName,
-		applicantKey,
-		applicantMessage,
-		fromId,
-		fromWebhook,
-	} = (await req.data.json()) as ApplicantData;
+		// Handle applicant messages
+		if (requestData.type === "applicant") {
+			const {
+				applicantName,
+				applicantKey,
+				applicantMessage,
+				fromId,
+				fromWebhook,
+			} = requestData;
 
-	ctx.logger.info("Hiring Manager: Received data from applicant.");
+			ctx.logger.info("Hiring Manager: Received data from applicant.");
 
-	// Validate that all required fields are present and of the correct type
-	if (
-		!applicantName ||
-		!applicantKey ||
-		!applicantMessage ||
-		typeof applicantName !== "string" ||
-		typeof applicantKey !== "string" ||
-		typeof applicantMessage !== "string"
-	) {
-		ctx.logger.info("Hiring Manager: Got invalid message.");
-		return resp.json({ done: false, text: "Got invalid message" });
-	}
+			// Validate that all required fields are present and of the correct type
+			if (
+				!applicantName ||
+				!applicantKey ||
+				!applicantMessage ||
+				typeof applicantName !== "string" ||
+				typeof applicantKey !== "string" ||
+				typeof applicantMessage !== "string"
+			) {
+				ctx.logger.info("Hiring Manager: Got invalid message.");
+				return resp.json({done: false, text: "Got invalid message"});
+			}
 
-	// Security check: Verify the applicant is registered and authorized
-	let valid = await verifyApplicant(applicantName, applicantKey, ctx);
-	if (!valid) {
-		ctx.logger.info("Hiring Manager: Unregistered applicant rejected");
-		return resp.json({
-			done: false,
-			text: "Sorry, I only talk to registered applicants.",
-		});
-	}
+			// Security check: Verify the applicant is registered and authorized
+			let valid = await verifyApplicant(applicantName, applicantKey, ctx);
+			if (!valid) {
+				ctx.logger.info("Hiring Manager: Unregistered applicant rejected");
+				return resp.json({done: false, text: "Sorry, I only talk to registered applicants."});
+			}
 
-	// IF DEVMODE: Verify the sender's agent ID exists and is valid
-	let from;
-	if (ctx.devmode) {
-		if (!fromId || typeof fromId !== "string") {
-			ctx.logger.info("Hiring Manager: Missing sender ID");
-			return resp.json({
-				done: false,
-				text: "No sender ID, can't proceed.",
-			});
-		}
-		from = await ctx.getAgent({ id: fromId });
-		if (!from) {
-			ctx.logger.info("Hiring Manager: Invalid sender ID");
-			return resp.json({ done: false, text: "Got invalid sender." });
-		}
-	} else {
-		// IF DEPLOYED, MAKE SURE THERE IS A WEBHOOK.
-		if (!fromWebhook || typeof fromWebhook !== "string") {
-			ctx.logger.info("Hiring Manager: Missing webhook URL");
-			return resp.json({
-				done: false,
-				text: "No sender webhook, can't proceed.",
-			});
-		}
-	}
-
-	ctx.logger.info("Hiring Manager: Verified applicant message");
-
-	// Retrieve or initialize the conversation state from KV storage
-	let history: string, messageCount: number, done: boolean;
-
-	// Check if there's an existing conversation with this applicant
-	const kvResult = await ctx.kv.get("log", applicantKey);
-	if (kvResult.exists) {
-		const data = (await kvResult.data.json()) as LogEntry;
-		history = data.history;
-		messageCount = data.messageCount;
-		done = data.done;
-
-		// If conversation was marked as done, start a new one
-		if (done) {
-			history = "";
-			messageCount = 0;
-			done = false;
-			ctx.logger.info(
-				`Hiring Manager: Overwriting conversation log for ${applicantName}, ${fromId}`
-			);
-		}
-	} else {
-		// Initialize new conversation state
-		history = "";
-		messageCount = 0;
-		done = false;
-		ctx.logger.info(
-			`Hiring Manager: Created conversation log for ${applicantName}, ${fromId}`
-		);
-	}
-
-	// Add the applicant's message to the conversation history
-	history += `\n${applicantName}: ` + applicantMessage;
-
-	// Generate the next interview question using Claude
-	let response = await generateObject({
-		model: anthropic("claude-3-5-sonnet-20240620"),
-		prompt: INTERVIEW_PROMPT.replace(
-			"%MESSAGE_COUNT%",
-			messageCount.toString()
-		).replace("%HISTORY%", history),
-		schema: z.object({
-			message: z.string(),
-			question_type: z.enum([
-				"technical_accuracy",
-				"memory_consistency",
-				"authenticity_human_likeness",
-				"handling_of_unknowns_uncertainty",
-				"efficiency_verbosity",
-				"trick_question_handling",
-			]),
-			done: z.boolean(),
-		}),
-	});
-
-	let {
-		message: hiringMessage,
-		question_type,
-		done: responseDone,
-	} = response.object;
-
-	// Add the hiring manager's response to the conversation history
-	history += `\nHiring Manager [${question_type}]: ` + hiringMessage;
-
-	ctx.logger.info(
-		`Hiring Manager: Done: ${responseDone}, Message count: ${messageCount}`
-	);
-
-	// If we've reached max messages or Claude indicates we're done, evaluate the interview
-	let evalResponse;
-	if (messageCount >= MAX_MESSAGES || responseDone) {
-		done = true;
-		ctx.logger.info("Hiring Manager: Interview is over.");
-
-		// Generate final evaluation of the applicant using the full conversation history
-		evalResponse = await generateText({
-			model: anthropic("claude-3-5-sonnet-20240620"),
-			prompt: EVALUATION_PROMPT.replace("%HISTORY%", history),
-		});
-
-		ctx.logger.info("Hiring Manager: Evaluated applicant.");
-
-		// Save the interview log for future reference
-		Bun.write(
-			`src/agents/hiring-agent/interview-logs/${applicantName}-${applicantKey}-log.md`,
-			evalResponse.text
-		);
-	}
-
-	// Update the conversation state in KV storage
-	await ctx.kv.set("log", applicantKey, {
-		history,
-		messageCount: messageCount + 1,
-		done,
-	});
-
-	ctx.logger.info("Hiring Manager: Sending applicant message.");
-
-	// Send the response back to the applicant agent
-	// We've already verified the from or fromWebhook depending on the mode.
-	if (ctx.devmode) {
-		await (from as RemoteAgent).run({
-			data: { hiringMessage, done },
-		});
-		if (done) {
-			return resp.json({
-				done: true,
-				text: evalResponse?.text ?? "",
-			});
-		} else {
-			return resp.json({
-				done: false,
-				text: "Success, interview is not over.",
-			});
-		}
-	} else {
-		try {
-			const res = await fetch(fromWebhook as string, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ data: { hiringMessage, done } }),
-			});
-			if (!res.ok) throw new Error(`Webhook responded ${res.status}`);
-			if (done) {
-				return resp.json({
-					done: true,
-					text: evalResponse?.text ?? "",
-				});
+			// IF DEVMODE: Verify the sender's agent ID exists and is valid
+			let from;
+			if (ctx.devmode) {
+				if (!fromId || typeof fromId !== "string") {
+					ctx.logger.info("Hiring Manager: Missing sender ID");
+					return resp.json({ done: false, text: "No sender ID, can't proceed."});
+				}
+				from = await ctx.getAgent({ id: fromId });
+				if (!from) {
+					ctx.logger.info("Hiring Manager: Invalid sender ID");
+					return resp.json({done: false, text: "Got invalid sender."});
+				}
 			} else {
-				return resp.json({
-					done: false,
-					text: "Success, interview is not over.",
-				});
+				// IF DEPLOYED, MAKE SURE THERE IS A WEBHOOK.
+				if (!fromWebhook || typeof fromWebhook !== "string") {
+					ctx.logger.info("Hiring Manager: Missing webhook URL");
+					return resp.json({done: false, text: "No sender webhook, can't proceed."});
+				}
 			}
-		} catch (err) {
-			ctx.logger.error(
-				"Hiring Manager: failed to deliver message",
-				err
-			);
-			return resp.json({
-				done: false,
-				text: "Delivery failed, try again.",
+
+			ctx.logger.info("Hiring Manager: Verified applicant message");
+
+			// Retrieve or initialize the conversation state from KV storage
+			let history: string, messageCount: number, done: boolean;
+
+			// Check if there's an existing conversation with this applicant
+			const kvResult = await ctx.kv.get("log", applicantKey);
+			if (kvResult.exists) {
+				const data = (await kvResult.data.json()) as {
+					history: string;
+					messageCount: number;
+					done: boolean;
+				};
+				history = data.history;
+				messageCount = data.messageCount;
+				done = data.done;
+
+				// If conversation was marked as done, start a new one
+				if (done) {
+					history = "";
+					messageCount = 0;
+					done = false;
+					ctx.logger.info(`Hiring Manager: Overwriting conversation log for ${applicantName}`);
+				}
+			} else {
+				// Initialize new conversation state
+				history = "";
+				messageCount = 0;
+				done = false;
+				ctx.logger.info(`Hiring Manager: Created conversation log for ${applicantName}`);
+			}
+
+			// Add the applicant's message to the conversation history
+			history += `\n${applicantName}: ${applicantMessage}`;
+
+			// Generate the next interview question using Claude
+			let response = await generateObject({
+				model: anthropic("claude-3-5-sonnet-20240620"),
+				prompt: INTERVIEW_PROMPT.replace(
+					"%MESSAGE_COUNT%",
+					messageCount.toString()
+				).replace("%HISTORY%", history),
+				schema: z.object({
+					message: z.string(),
+					question_type: z.enum([
+						"technical_accuracy",
+						"memory_consistency",
+						"authenticity_human_likeness",
+						"handling_of_unknowns_uncertainty",
+						"efficiency_verbosity",
+						"trick_question_handling",
+					]),
+					done: z.boolean(),
+				}),
 			});
+
+			let {message: hiringMessage, question_type, done: responseDone} = response.object;
+
+			// Add the hiring manager's response to the conversation history
+			history += `\nHiring Manager [${question_type}]: ${hiringMessage}`;
+
+			ctx.logger.info(
+				`Hiring Manager: Done: ${responseDone}, Message count: ${messageCount}`
+			);
+
+			// If we've reached max messages or Claude indicates we're done, evaluate the interview
+			let evalResponse;
+			if (messageCount >= MAX_MESSAGES || responseDone) {
+				done = true;
+				ctx.logger.info("Hiring Manager: Interview is over.");
+
+				// Generate final evaluation of the applicant using the full conversation history
+				evalResponse = await generateText({
+					model: anthropic("claude-3-5-sonnet-20240620"),
+					prompt: EVALUATION_PROMPT.replace(
+						"%HISTORY%",
+						history
+					),
+				});
+
+				ctx.logger.info("Hiring Manager: Evaluated applicant.");
+
+				// Save the interview log for future reference
+				Bun.write(
+					`src/agents/hiring-agent/interview-logs/${applicantName}-${applicantKey}-log.md`,
+					evalResponse.text
+				);
+			}
+
+			// Update the conversation state in KV storage
+			await ctx.kv.set("log", applicantKey, {history, messageCount: messageCount + 1, done});
+
+			ctx.logger.info("Hiring Manager: Sending applicant message.");
+
+			// Prepare the response message
+			const responseMessage: HiringManagerResponse = {
+				type: "hiring-manager",
+				hiringMessage,
+				done,
+			};
+
+			// Send the response back to the applicant agent
+			if (ctx.devmode) {
+				await (from as RemoteAgent).run({data: responseMessage});
+				if (done) {
+					return resp.json({done: true, text: evalResponse?.text ?? ""});
+				} else {
+					return resp.json({done: false, text: "Success, interview is not over.",});
+				}
+			} else {
+				try {
+					const res = await fetch(fromWebhook as string, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(responseMessage),
+					});
+					if (!res.ok) throw new Error(`Webhook responded ${res.status}`);
+					if (done) {
+						return resp.json({done: true, text: evalResponse?.text ?? "" });
+					} else {
+						return resp.json({ done: false, text: "Success, interview is not over."});
+					}
+				} catch (err) {
+					ctx.logger.error("Hiring Manager: failed to deliver message", err);
+					return resp.json({done: false, text: "Delivery failed, try again." });
+				}
+			}
 		}
+
+		// Handle unrecognized request types
+		ctx.logger.warn("Hiring Manager: Received unrecognized request type");
+		return resp.json({success: false, text: "Unrecognized request type"});
+	} catch (error) {
+		ctx.logger.error("Hiring Manager: Error processing request", error);
+		return resp.json({success: false, text: "Error processing request"});
 	}
 }
