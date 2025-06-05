@@ -60,6 +60,7 @@ export const welcome = () => {
 		prompts: [
 			{
 				data: JSON.stringify({
+					type: "admin",
 					applicantName: "Foo Bar",
 					applicantKey: process.env.EXAMPLE_APPLICANT_KEY,
 					adminKey: process.env.ADMIN_KEY,

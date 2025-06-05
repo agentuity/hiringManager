@@ -76,6 +76,20 @@ async function sendMessageToHiringManager(
 	}
 }
 
+export const welcome = () => {
+	return {
+		welcome: "Welcome to the applicant agent, you can start the interview with the provided schema.",
+		prompts: [
+			{
+				data: JSON.stringify({
+					type: "init",
+				}),
+				contentType: "application/json",
+			},
+		],
+	};
+};
+
 export default async function Agent(
 	req: AgentRequest,
 	resp: AgentResponse,
