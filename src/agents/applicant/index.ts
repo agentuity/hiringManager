@@ -110,7 +110,7 @@ export default async function Agent(
 		});
 	}
 	// Handle agent-triggered events (responses from the hiring manager)
-	else if (req.trigger === "agent") {
+	else if (req.trigger === "agent" || req.trigger === "webhook") {
 		let { hiringMessage, done } = (await req.data.json()) as hiringData;
 		ctx.logger.info("Applicant: Received message from hiring manager.");
 

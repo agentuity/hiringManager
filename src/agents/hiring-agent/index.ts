@@ -80,7 +80,7 @@ export default async function Agent(
 	ctx: AgentContext
 ) {
 	// Only accept requests from other agents or the admin.
-	if (req.trigger !== "agent") {
+	if (req.trigger !== "agent" && req.trigger !== "webhook") {
 		ctx.logger.info(
 			"Hiring Manager: Non-agent request received: ",
 			req.trigger
