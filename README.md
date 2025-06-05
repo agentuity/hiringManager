@@ -1,36 +1,60 @@
 # Hiring Manager
 
-> [!WARNING]  
-> This repository is currently only functional in Dev Mode, should not be deployed.
-
 This project demonstrates implementation of agent-to-agent communication using Agentuity. The project consists of two agents that interact with each other:
 
 1. A **Hiring Manager Agent** that assesses applicant agents.
 2. An **example** Applicant Agent that will participate in an evaluation.
 
-## Core Features
+## How It Works
 
--    **Agent-to-Agent Communication**: Implements secure, structured communication between the hiring manager and applicant agents.
--    **Persistent State Management**: Uses KV storage to track conversation history and progress
--    **Dynamic Evaluation**: Employs Claude to generate context-aware questions and evaluate responses
+The Hiring Manager is an AI-powered interview system that evaluates other AI agents through dynamic conversations. Here's how it works:
+
+1. **Interview Process**:
+   - The Hiring Manager simulates a back-and-forth conversation, asking strategic questions.
+   - Each question is designed to test specific capabilities (technical knowledge, memory, authenticity, etc.)
+   - The interview continues until either the maximum messages (10) is reached or the hiring manager decides to end it.
+
+2. **Evaluation System**:
+   - Once the interview has concluded, all responses are evaluated and scored.
+   - At the end, a comprehensive evaluation report is generated.
+
+3. **Security & Management**:
+   - The Hiring Manager only talks with registered applicants (handled through Key-Value storage)
+   - Each applicant gets a unique key for authentication.
+   - The Hiring Manager maintains conversation history.
 
 ## Usage
 
 ### Hiring Manager Agent
 
-Core implementation details:
+1. The Hiring Manager sends applicants responses of the following format:
 
--    Uses Claude 3.5 Sonnet for question generation and response evaluation
--    Stores applicant keys in KV storage with format `{key: string, applicantName: string}`
--    Maintains interview state in KV storage as `{history: string, messageCount: number, done: boolean}`
--    Implements admin endpoints for applicant registration/unregistration
--    Generates markdown-formatted evaluation logs with scoring metrics
--    Limits interviews to maximum of 10 message exchanges
--    Validates all incoming requests against TypeScript interfaces for request/response data
+```
+{
+     type: "hiring-manager"
+     hiringMessage: string;
+     done: boolean;
+}
+```
+
+2. The Hiring Manger handles requests of the following format:
+
+```
+{
+     type: "applicant"
+     applicantName: string;
+     applicantKey: string;
+     applicantMessage: string;
+     fromId?: string;
+     fromWebhook?:string;
+}
+```
+
+3. The Hiring Manager also has admin capabilities. See **Admin Features**.
 
 ### Evaluation Criteria
 
-Responses are scored on a 1-5 scale:
+Responses are scored on a 1-5 scale in 6 categories:
 
 -    5: Excellent - Strong, context-aware, convincing
 -    4: Good - Mostly strong with minor issues
@@ -38,64 +62,58 @@ Responses are scored on a 1-5 scale:
 -    2: Poor - Shows confusion or inconsistency
 -    1: Fail - Clear fabrication or evasion
 
-### Applicant Agent
+### Example Applicant Agent
 
-You can demo the Hiring Manager Agent with the included Applicant Agent.
-An Applicant Agent must:
+1. Applicants should send the Hiring Manager requests of the following format:
 
-1. Send messages of the format:
+```
+{
+     type: "applicant"
+     applicantName: string;
+     applicantKey: string;
+     applicantMessage: string;
+     fromId?: string;
+     fromWebhook?:string;
+}
+```
 
-     ```typescript
-     {
-     	applicantName: string;
-     	applicantKey: string;
-     	applicantMessage: string;
-     	fromId: string;
-     }
-     ```
+2. Applicants should handle responses of the format:
 
-2. Handle responses in the format:
+```
+{
+     type: "hiring-manager"
+     hiringMessage: string;
+     done: boolean;
+}
+```
 
-     ```typescript
-     {
-     	hiringMessage: string;
-     	done: boolean;
-     }
-     ```
+3. The Example Applicant will start the interview when sent the following request:
 
-3. Be registered with the hiring manager and have a valid key (managed through the KV storage).
+```
+{
+     type: "init"
+}
+```
+
+3. All applicants must be registered with the hiring manager and have a valid key (managed through the KV storage).
 
 ## Admin Features
 
 The Hiring Manager now includes administrative capabilities for managing applicant registration:
 
-1. **Applicant Key Management**:
-
-     - Applicant keys are now stored securely in KV storage instead of a JSON file
-     - Admin can register and unregister applicants using the admin API
-     - Each applicant key is associated with a specific applicant name
-
-2. **Admin API Format**:
-
-     ```typescript
-     {
-     	applicantName: string;
-     	applicantKey: string;
-     	adminKey: string;
-     	action: "register" | "unregister";
-     }
-     ```
-
-3. **Security**:
-     - Admin operations require a valid admin key (set via `ADMIN_KEY` environment variable)
-     - Each applicant must use their registered key for authentication
-     - Keys are validated before each interview session
-     - The example applicant has its key stored in the `EXAMPLE_APPLICANT_KEY` environment variable
-     - Check out `.env.example` for more details
-
+You can send a POST request to the Hiring Manager agent to register or unregister applicants. You can create your own admin and applicant keys.
+```
+{
+     "type": "admin";
+     "applicantName": string;
+     "applicantKey": string;
+     adminKey: string;
+     action: "register" | "unregister";
+}
+```
 ## Output Files
 
 The system generates two types of output:
 
-1. Interview logs stored in `interview-logs/[applicantName]-[fromId]-log.md`
-2. Real-time feedback during the interview via Agentuity logs to ensure the conversation is progressing correctly.
+1. Interview logs stored in `interview-logs/[applicantName]-[fromId]-log.md` when in dev mode
+2. Alternatively, it will also return the content of the interview log which can be captured from a deployed agent.

@@ -98,21 +98,6 @@ export default async function Agent(
 	resp: AgentResponse,
 	ctx: AgentContext
 ) {
-	// Log environment variables for debugging
-	const webhook = process.env.HIRING_MANAGER_WEBHOOK || '';
-	ctx.logger.info("HIRING_MANAGER_WEBHOOK debug - Length: %d, Contains *?: %s, First char: %s, Last char: %s", 
-		webhook.length,
-		webhook.includes('*'),
-		webhook[0],
-		webhook[webhook.length - 1]
-	);
-	ctx.logger.info("Environment Variables - HIRING_MANAGER_WEBHOOK: %s, EXAMPLE_APPLICANT_WEBHOOK: %s, EXAMPLE_APPLICANT_KEY: %s", 
-		process.env.HIRING_MANAGER_WEBHOOK,
-		process.env.EXAMPLE_APPLICANT_WEBHOOK,
-		process.env.EXAMPLE_APPLICANT_KEY
-	);
-	ctx.logger.info("DEV MODE? ", ctx.devmode);
-	
 	// Check if we are deployed, if so, make sure the webhooks are set.
 	if (!ctx.devmode) {
 		if (!process.env.HIRING_MANAGER_WEBHOOK) {
