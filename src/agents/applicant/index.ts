@@ -146,6 +146,7 @@ export default async function Agent(
 				"%MESSAGE%",
 				hiringMessage
 			);
+			ctx.logger.info("Applicant: Generating response...");
 			const response = await generateText({
 				model: anthropic("claude-3-7-sonnet-20250219"),
 				prompt,

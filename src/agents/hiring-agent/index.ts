@@ -190,6 +190,7 @@ export default async function Agent(
 			// Add the applicant's message to the conversation history
 			history += `\n${applicantName}: ${applicantMessage}`;
 
+			ctx.logger.info("Hiring Manager: Generating response...");
 			// Generate the next interview question using Claude
 			let response = await generateObject({
 				model: anthropic("claude-3-5-sonnet-20240620"),
