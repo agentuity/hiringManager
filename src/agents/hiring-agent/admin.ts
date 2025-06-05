@@ -36,42 +36,23 @@ export async function validateAdminRequest(
 
 		if (data.action === "register") {
 			try {
-				await ctx.kv.set(
-					"applicants",
-					data.applicantKey,
-					data.applicantName
-				);
-				return {
-					success: true,
-					message: `Successfully registered ${data.applicantName}.`,
-				};
+				await ctx.kv.set("applicants", data.applicantKey, data.applicantName);
+				return { success: true, message: `Successfully registered ${data.applicantName}.` };
 			} catch (error) {
-				return {
-					success: false,
-					message: "Failed to register applicant.",
-				};
+				return { success: false, message: "Failed to register applicant." };
 			}
 		} else if (data.action === "unregister") {
 			try {
 				await ctx.kv.delete("applicants", data.applicantKey);
-				return {
-					success: true,
-					message: `Successfully unregistered ${data.applicantName}.`,
-				};
+				return { success: true, message: `Successfully unregistered ${data.applicantName}.` };
 			} catch (error) {
-				return {
-					success: false,
-					message: "Failed to unregister applicant.",
-				};
+				return { success: false, message: "Failed to unregister applicant." };
 			}
 		}
 
 		return { success: false, message: "Invalid action." };
 	} catch (error) {
-		return {
-			success: false,
-			message: "Failed to process admin request.",
-		};
+		return { success: false, message: "Failed to process admin request." };
 	}
 }
 
@@ -86,7 +67,6 @@ export async function verifyApplicant(
 	try {
 		const result = await ctx.kv.get("applicants", applicantKey);
 		if (!result.exists) return false;
-
 		const storedName = await result.data.text();
 		return storedName === applicantName;
 	} catch (error) {

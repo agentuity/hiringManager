@@ -2,11 +2,7 @@
  * Example Agentuity Agent: Applicant Agent
  */
 
-import {
-	type AgentContext,
-	type AgentRequest,
-	type AgentResponse,
-} from "@agentuity/sdk";
+import { type AgentContext, type AgentRequest, type AgentResponse } from "@agentuity/sdk";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 
