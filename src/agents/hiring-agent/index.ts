@@ -81,6 +81,10 @@ export default async function Agent(
 ) {
 	// Only accept requests from other agents or the admin.
 	if (req.trigger !== "agent") {
+		ctx.logger.info(
+			"Hiring Manager: Non-agent request received: ",
+			req.trigger
+		);
 		if (req.trigger === "manual") {
 			try {
 				const result = await validateAdminRequest(

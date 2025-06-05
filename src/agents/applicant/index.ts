@@ -67,10 +67,16 @@ export default async function Agent(
 	// Check if we are deployed, if so, make sure the webhooks are set.
 	if (!ctx.devmode) {
 		if (!process.env.HIRING_MANAGER_WEBHOOK) {
-			return resp.text("[ERROR]: Missing HIRING_MANAGER_WEBHOOK.");
+			return resp.json({
+				success: false,
+				text: "[ERROR]: Missing HIRING_MANAGER_WEBHOOK.",
+			});
 		}
 		if (!process.env.EXAMPLE_APPLICANT_WEBHOOK) {
-			return resp.text("[ERROR]: Missing EXAMPLE_APPLICANT_WEBHOOK.");
+			return resp.json({
+				success: false,
+				text: "[ERROR]: Missing EXAMPLE_APPLICANT_WEBHOOK.",
+			});
 		}
 	}
 
@@ -79,9 +85,10 @@ export default async function Agent(
 		let text = (await req.data.text()).replace(/^"|"$/g, "");
 		ctx.logger.info(`Applicant: Received message: ${text}`);
 		if (text !== "start") {
-			return resp.text(
-				"When you're ready to start the interview, send 'start'."
-			);
+			return resp.json({
+				success: false,
+				text: "When you're ready to start the interview, send 'start'.",
+			});
 		}
 
 		// Send initial message to hiring manager with required applicant data
@@ -97,7 +104,10 @@ export default async function Agent(
 		};
 
 		await sendMessageToHiringManager(data, ctx);
-		return resp.text("Sent initial message.");
+		return resp.json({
+			success: true,
+			text: "Sent initial message.",
+		});
 	}
 	// Handle agent-triggered events (responses from the hiring manager)
 	else if (req.trigger === "agent") {
@@ -107,7 +117,10 @@ export default async function Agent(
 		// Check if the interview is complete
 		if (done) {
 			ctx.logger.info("Applicant: Concluding interview.");
-			return resp.text("Interview has concluded.");
+			return resp.json({
+				success: true,
+				text: "Interview has concluded.",
+			});
 		} else {
 			// Generate a response using Claude AI model
 			let prompt = `
@@ -144,7 +157,19 @@ Question: ${hiringMessage}
 			};
 
 			await sendMessageToHiringManager(data, ctx);
-			return resp.text("Sent message to hiring manager.");
+			return resp.json({
+				success: true,
+				text: "Sent message to hiring manager.",
+			});
 		}
 	}
+
+	// Handle unrecognized triggers
+	ctx.logger.warn(
+		`Applicant: Received unrecognized trigger: ${req.trigger}`
+	);
+	return resp.json({
+		success: false,
+		text: "Unrecognized trigger type: " + req.trigger,
+	});
 }
