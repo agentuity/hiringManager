@@ -251,7 +251,7 @@ export default async function Agent(
 
 		// Save the interview log for future reference
 		Bun.write(
-			`src/agents/hiring-agent/interview-logs/${applicantName}-${fromId}-log.md`,
+			`src/agents/hiring-agent/interview-logs/${applicantName}-${applicantKey}-log.md`,
 			evalResponse.text
 		);
 	}
@@ -267,23 +267,46 @@ export default async function Agent(
 
 	// Send the response back to the applicant agent
 	// We've already verified the from or fromWebhook depending on the mode.
-	if (!ctx.devmode) {
-		await (from as RemoteAgent).run({ data: { hiringMessage, done } });
-	} else {
-		await fetch(fromWebhook as string, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({ data: { hiringMessage, done } }),
-		});
-	}
-	if (done) {
-		return resp.json({ done: true, text: evalResponse?.text ?? "" });
-	} else {
+	try {
+		if (!ctx.devmode) {
+			await (from as RemoteAgent).run({
+				data: { hiringMessage, done },
+			});
+			if (done) {
+				return resp.json({
+					done: true,
+					text: evalResponse?.text ?? "",
+				});
+			} else {
+				return resp.json({
+					done: false,
+					text: "Success, interview is not over.",
+				});
+			}
+		} else {
+			const res = await fetch(fromWebhook as string, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ data: { hiringMessage, done } }),
+			});
+			if (!res.ok) throw new Error(`Webhook responded ${res.status}`);
+			if (done) {
+				return resp.json({
+					done: true,
+					text: evalResponse?.text ?? "",
+				});
+			} else {
+				return resp.json({
+					done: false,
+					text: "Success, interview is not over.",
+				});
+			}
+		}
+	} catch (err) {
+		ctx.logger.error("Hiring Manager: failed to deliver message", err);
 		return resp.json({
 			done: false,
-			text: "Success, interview is not over.",
+			text: "Delivery failed, try again.",
 		});
 	}
 }

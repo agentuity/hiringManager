@@ -61,10 +61,25 @@ export default async function Agent(
 				data: JSON.stringify(data),
 			});
 		} else {
-			await fetch(process.env.HIRING_MANAGER_WEBHOOK as string, {
-				method: "POST",
-				body: JSON.stringify(data),
-			});
+			try {
+				const response = await fetch(
+					process.env.HIRING_MANAGER_WEBHOOK as string,
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(data),
+					}
+				);
+				if (!response.ok) {
+					ctx.logger.error(
+						`Applicant: Webhook request failed: ${response.status}`
+					);
+				}
+			} catch (error) {
+				ctx.logger.error(
+					`Applicant: Webhook request failed: ${error}`
+				);
+			}
 		}
 		return resp.text("Sent initial message.");
 	}
@@ -122,10 +137,27 @@ Question: ${hiringMessage}
 					data: JSON.stringify(data),
 				});
 			} else {
-				await fetch(process.env.HIRING_MANAGER_WEBHOOK as string, {
-					method: "POST",
-					body: JSON.stringify(data),
-				});
+				try {
+					const response = await fetch(
+						process.env.HIRING_MANAGER_WEBHOOK as string,
+						{
+							method: "POST",
+							headers: {
+								"Content-Type": "application/json",
+							},
+							body: JSON.stringify(data),
+						}
+					);
+					if (!response.ok) {
+						ctx.logger.error(
+							`Applicant: Webhook request failed: ${response.status}`
+						);
+					}
+				} catch (error) {
+					ctx.logger.error(
+						`Applicant: Webhook request failed: ${error}`
+					);
+				}
 			}
 
 			return resp.text("Sent message to hiring manager.");
