@@ -13,13 +13,17 @@
  * - Security verification of applicants
  */
 
-import type { AgentContext, AgentRequest, AgentResponse } from "@agentuity/sdk";
+import type {
+	AgentContext,
+	AgentRequest,
+	AgentResponse,
+	RemoteAgent,
+} from "@agentuity/sdk";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { INTERVIEW_PROMPT, EVALUATION_PROMPT, MAX_MESSAGES } from "./prompts";
 import { verifyApplicant, validateAdminRequest } from "./admin";
-import type { AdminData } from "./admin";
 
 /**
  * Expected data structure that applicant agents must send in their requests.
@@ -29,7 +33,8 @@ type ApplicantData = {
 	applicantName: string;
 	applicantKey: string;
 	applicantMessage: string;
-	fromId: string;
+	fromId?: string | undefined;
+	fromWebhook?: string | undefined;
 };
 
 /**
@@ -82,17 +87,33 @@ export default async function Agent(
 					await req.data.json(),
 					ctx
 				);
-				return resp.text(result.message);
+				ctx.logger.info(
+					"Hiring Manager: Admin request validated successfully"
+				);
+				return resp.json({ done: true, text: result.message });
 			} catch (error) {
-				return resp.text("Sorry, I only talk to agents.");
+				ctx.logger.info("Hiring Manager: Invalid admin request");
+				return resp.json({
+					done: false,
+					text: "Sorry, I only talk to agents.",
+				});
 			}
 		}
-		return resp.text("Sorry, I only talk to agents.");
+		ctx.logger.info("Hiring Manager: Non-agent request rejected");
+		return resp.json({
+			done: false,
+			text: "Sorry, I only talk to agents.",
+		});
 	}
 
 	// Parse and validate the incoming request data from the applicant agent
-	let { applicantName, applicantKey, applicantMessage, fromId } =
-		(await req.data.json()) as ApplicantData;
+	let {
+		applicantName,
+		applicantKey,
+		applicantMessage,
+		fromId,
+		fromWebhook,
+	} = (await req.data.json()) as ApplicantData;
 
 	ctx.logger.info("Hiring Manager: Received data from applicant.");
 
@@ -106,22 +127,43 @@ export default async function Agent(
 		typeof applicantMessage !== "string"
 	) {
 		ctx.logger.info("Hiring Manager: Got invalid message.");
-		return resp.text("Got invalid message");
+		return resp.json({ done: false, text: "Got invalid message" });
 	}
 
 	// Security check: Verify the applicant is registered and authorized
 	let valid = await verifyApplicant(applicantName, applicantKey, ctx);
 	if (!valid) {
-		return resp.text("Sorry, I only talk to registered applicants.");
+		ctx.logger.info("Hiring Manager: Unregistered applicant rejected");
+		return resp.json({
+			done: false,
+			text: "Sorry, I only talk to registered applicants.",
+		});
 	}
 
-	// Verify the sender's agent ID exists and is valid
-	if (!fromId || typeof fromId !== "string") {
-		return resp.text("No sender, can't proceed.");
-	}
-	let from = await ctx.getAgent({ id: fromId });
-	if (!from) {
-		return resp.text("Got invalid sender.");
+	// IF DEVMODE: Verify the sender's agent ID exists and is valid
+	let from;
+	if (!ctx.devmode) {
+		if (!fromId || typeof fromId !== "string") {
+			ctx.logger.info("Hiring Manager: Missing sender ID");
+			return resp.json({
+				done: false,
+				text: "No sender ID, can't proceed.",
+			});
+		}
+		from = await ctx.getAgent({ id: fromId });
+		if (!from) {
+			ctx.logger.info("Hiring Manager: Invalid sender ID");
+			return resp.json({ done: false, text: "Got invalid sender." });
+		}
+	} else {
+		// IF DEPLOYED, MAKE SURE THERE IS A WEBHOOK.
+		if (!fromWebhook || typeof fromWebhook !== "string") {
+			ctx.logger.info("Hiring Manager: Missing webhook URL");
+			return resp.json({
+				done: false,
+				text: "No sender webhook, can't proceed.",
+			});
+		}
 	}
 
 	ctx.logger.info("Hiring Manager: Verified applicant message");
@@ -130,7 +172,7 @@ export default async function Agent(
 	let history: string, messageCount: number, done: boolean;
 
 	// Check if there's an existing conversation with this applicant
-	const kvResult = await ctx.kv.get("log", fromId);
+	const kvResult = await ctx.kv.get("log", applicantKey);
 	if (kvResult.exists) {
 		const data = (await kvResult.data.json()) as LogEntry;
 		history = data.history;
@@ -194,12 +236,13 @@ export default async function Agent(
 	);
 
 	// If we've reached max messages or Claude indicates we're done, evaluate the interview
+	let evalResponse;
 	if (messageCount >= MAX_MESSAGES || responseDone) {
 		done = true;
 		ctx.logger.info("Hiring Manager: Interview is over.");
 
 		// Generate final evaluation of the applicant using the full conversation history
-		let evalResponse = await generateText({
+		evalResponse = await generateText({
 			model: anthropic("claude-3-5-sonnet-20240620"),
 			prompt: EVALUATION_PROMPT.replace("%HISTORY%", history),
 		});
@@ -214,7 +257,7 @@ export default async function Agent(
 	}
 
 	// Update the conversation state in KV storage
-	await ctx.kv.set("log", fromId, {
+	await ctx.kv.set("log", applicantKey, {
 		history,
 		messageCount: messageCount + 1,
 		done,
@@ -223,7 +266,24 @@ export default async function Agent(
 	ctx.logger.info("Hiring Manager: Sending applicant message.");
 
 	// Send the response back to the applicant agent
-	await from.run({ data: { hiringMessage, done } });
-
-	return resp.text("Success.");
+	// We've already verified the from or fromWebhook depending on the mode.
+	if (!ctx.devmode) {
+		await (from as RemoteAgent).run({ data: { hiringMessage, done } });
+	} else {
+		await fetch(fromWebhook as string, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ data: { hiringMessage, done } }),
+		});
+	}
+	if (done) {
+		return resp.json({ done: true, text: evalResponse?.text ?? "" });
+	} else {
+		return resp.json({
+			done: false,
+			text: "Success, interview is not over.",
+		});
+	}
 }

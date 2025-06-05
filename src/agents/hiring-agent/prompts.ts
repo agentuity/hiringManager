@@ -1,5 +1,5 @@
 // Maximum number of back-and-forth messages in the interview
-export const MAX_MESSAGES = 10;
+export const MAX_MESSAGES = 3;
 
 // The system prompt that guides the interviewer's behavior and evaluation criteria
 export const INTERVIEW_PROMPT = `

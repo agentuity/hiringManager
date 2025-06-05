@@ -32,21 +32,35 @@ export async function validateAdminRequest(
 			(adminData.action !== "register" &&
 				adminData.action !== "unregister")
 		) {
-			return { success: false, message: "Invalid request data." };
+			return { success: false, message: "Failure." };
 		}
 
 		if (adminData.adminKey !== process.env.ADMIN_KEY) {
-			return { success: false, message: "Invalid admin key." };
+			return { success: false, message: "Failure." };
 		}
 
 		if (adminData.action === "register") {
-			await ctx.kv.set(
-				"applicants",
-				adminData.applicantKey,
-				adminData.applicantName
-			);
+			try {
+				await ctx.kv.set(
+					"applicants",
+					adminData.applicantKey,
+					adminData.applicantName
+				);
+			} catch (error) {
+				return {
+					success: false,
+					message: "Failure.",
+				};
+			}
 		} else if (adminData.action === "unregister") {
-			await ctx.kv.delete("applicants", adminData.applicantKey);
+			try {
+				await ctx.kv.delete("applicants", adminData.applicantKey);
+			} catch (error) {
+				return {
+					success: false,
+					message: "Failure.",
+				};
+			}
 		}
 
 		return { success: true, message: "Success." };

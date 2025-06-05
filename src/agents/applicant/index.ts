@@ -21,6 +21,16 @@ export default async function Agent(
 	resp: AgentResponse,
 	ctx: AgentContext
 ) {
+	// Check if we are deployed, if so, make sure the webhooks are set.
+	if (!ctx.devmode) {
+		if (!process.env.HIRING_MANAGER_WEBHOOK) {
+			return resp.text("[ERROR]: Missing HIRING_MANAGER_WEBHOOK.");
+		}
+		if (!process.env.EXAMPLE_APPLICANT_WEBHOOK) {
+			return resp.text("[ERROR]: Missing EXAMPLE_APPLICANT_WEBHOOK.");
+		}
+	}
+
 	// Handle manual triggers (when a user directly interacts with the agent)
 	if (req.trigger === "manual") {
 		let text = (await req.data.text()).replace(/^"|"$/g, "");
@@ -37,15 +47,25 @@ export default async function Agent(
 
 		// Send initial message to hiring manager with required applicant data
 		ctx.logger.info("Applicant: Sending initial message.");
-		await hiring_manager.run({
-			data: {
-				applicantName: "Foo Bar",
-				applicantKey:
-					process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
-				applicantMessage: "I am ready to start the interview.",
-				fromId: ctx.agent.id, // This agent's ID
-			},
-		});
+		let data = {
+			applicantName: "Foo Bar",
+			applicantKey: process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
+			applicantMessage: "I am ready to start the interview.",
+			fromId: ctx.devmode ? ctx.agent.id : undefined, // This agent's ID
+			fromWebhook: ctx.devmode
+				? undefined
+				: process.env.EXAMPLE_APPLICANT_WEBHOOK,
+		};
+		if (ctx.devmode) {
+			await hiring_manager.run({
+				data: JSON.stringify(data),
+			});
+		} else {
+			await fetch(process.env.HIRING_MANAGER_WEBHOOK as string, {
+				method: "POST",
+				body: JSON.stringify(data),
+			});
+		}
 		return resp.text("Sent initial message.");
 	}
 	// Handle agent-triggered events (responses from the hiring manager)
@@ -82,21 +102,33 @@ Question: ${hiringMessage}
 			});
 
 			// Send the generated response back to the hiring manager
-			let hiring_manager = await ctx.getAgent({
-				name: "hiring-agent",
-			});
+			let data = {
+				applicantName: "Foo Bar",
+				applicantKey:
+					process.env.EXAMPLE_APPLICANT_KEY ?? "missing-key",
+				applicantMessage: response.text,
+				fromId: ctx.devmode ? ctx.agent.id : undefined, // This agent's ID
+				fromWebhook: ctx.devmode
+					? undefined
+					: process.env.EXAMPLE_APPLICANT_WEBHOOK,
+			};
+
 			ctx.logger.info("Applicant: Sending message to hiring manager.");
-			await hiring_manager.run({
-				data: {
-					applicantName: "Foo Bar",
-					applicantKey:
-						process.env.EXAMPLE_APPLICANT_KEY ??
-						"missing-key",
-					applicantMessage: response.text,
-					fromId: ctx.agent.id,
-				},
-			});
-			return resp.text("Sent message to hirer.");
+			if (ctx.devmode) {
+				let hiring_manager = await ctx.getAgent({
+					name: "hiring-agent",
+				});
+				await hiring_manager.run({
+					data: JSON.stringify(data),
+				});
+			} else {
+				await fetch(process.env.HIRING_MANAGER_WEBHOOK as string, {
+					method: "POST",
+					body: JSON.stringify(data),
+				});
+			}
+
+			return resp.text("Sent message to hiring manager.");
 		}
 	}
 }
