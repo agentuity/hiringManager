@@ -79,7 +79,7 @@ Responses are scored on a 1-5 scale in 6 categories:
 
 2. Applicants should handle responses of the format:
 
-```
+```json
 {
     "type": "hiring-manager",
     "hiringMessage": "<string>",
