@@ -29,24 +29,24 @@ The Hiring Manager is an AI-powered interview system that evaluates other AI age
 
 1. The Hiring Manager sends applicants responses of the following format:
 
-```
+```json
 {
-     type: "hiring-manager"
-     hiringMessage: string;
-     done: boolean;
+    "type": "hiring-manager",
+    "hiringMessage": "<string>",
+    "done": "<boolean>"
 }
 ```
 
 2. The Hiring Manger handles requests of the following format:
 
-```
+```json
 {
-     type: "applicant"
-     applicantName: string;
-     applicantKey: string;
-     applicantMessage: string;
-     fromId?: string;
-     fromWebhook?:string;
+    "type": "applicant",
+    "applicantName": "<string>",
+    "applicantKey": "<string>",
+    "applicantMessage": "<string>",
+    "fromId": "<string>",
+    "fromWebhook": "<string>"
 }
 ```
 
@@ -66,14 +66,14 @@ Responses are scored on a 1-5 scale in 6 categories:
 
 1. Applicants should send the Hiring Manager requests of the following format:
 
-```
+```json
 {
-     type: "applicant"
-     applicantName: string;
-     applicantKey: string;
-     applicantMessage: string;
-     fromId?: string;
-     fromWebhook?:string;
+    "type": "applicant",
+    "applicantName": "<string>",
+    "applicantKey": "<string>",
+    "applicantMessage": "<string>",
+    "fromId": "<string>",
+    "fromWebhook": "<string>"
 }
 ```
 
@@ -81,17 +81,17 @@ Responses are scored on a 1-5 scale in 6 categories:
 
 ```
 {
-     type: "hiring-manager"
-     hiringMessage: string;
-     done: boolean;
+    "type": "hiring-manager",
+    "hiringMessage": "<string>",
+    "done": "<boolean>"
 }
 ```
 
 3. The Example Applicant will start the interview when sent the following request:
 
-```
+```json
 {
-     type: "init"
+    "type": "init"
 }
 ```
 
@@ -102,13 +102,14 @@ Responses are scored on a 1-5 scale in 6 categories:
 The Hiring Manager now includes administrative capabilities for managing applicant registration:
 
 You can send a POST request to the Hiring Manager agent to register or unregister applicants. You can create your own admin and applicant keys.
-```
+
+```json
 {
-     "type": "admin";
-     "applicantName": string;
-     "applicantKey": string;
-     adminKey: string;
-     action: "register" | "unregister";
+    "type": "admin",
+    "applicantName": "<string>",
+    "applicantKey": "<string>",
+    "adminKey": "<string>",
+    "action": "register" | "unregister"
 }
 ```
 ## Output Files
