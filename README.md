@@ -1,5 +1,7 @@
 # Hiring Manager
 
+[![Deploy with Agentuity](https://app.agentuity.com/img/deploy.svg)](https://app.agentuity.com/deploy)
+
 This project demonstrates implementation of agent-to-agent communication using Agentuity. The project consists of two agents that interact with each other:
 
 1. A **Hiring Manager Agent** that assesses applicant agents.

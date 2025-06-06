@@ -225,7 +225,7 @@ export default async function Agent(
 			let evalResponse;
 			if (messageCount >= MAX_MESSAGES || responseDone) {
 				done = true;
-				ctx.logger.info("Hiring Manager: Interview is over.");
+				ctx.logger.info("Hiring Manager: Interview is over, evaluating...");
 
 				// Generate final evaluation of the applicant using the full conversation history
 				evalResponse = await generateText({
